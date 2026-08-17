@@ -54,11 +54,16 @@ class Barang extends Model
                 ->lockForUpdate()
                 ->first();
 
+            // Ambil 5 digit terakhir agar support hingga 99999 item per jenis.
             $nextNumber = $last
-                ? ((int) substr($last->id, -4)) + 1
+                ? ((int) substr($last->id, strrpos($last->id, '-') + 1)) + 1
                 : 1;
 
-            $barang->id = $prefix . '-' . str_pad((string) $nextNumber, 4, '0', STR_PAD_LEFT);
+            if ($nextNumber > 99999) {
+                throw new \OverflowException("Nomor urut barang jenis '{$barang->jenis_barang}' telah mencapai batas maksimal (99999).");
+            }
+
+            $barang->id = $prefix . '-' . str_pad((string) $nextNumber, 5, '0', STR_PAD_LEFT);
         });
     }
 
