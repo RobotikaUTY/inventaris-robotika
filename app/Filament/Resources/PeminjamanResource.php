@@ -117,6 +117,11 @@ class PeminjamanResource extends Resource
                         'selesai' => 'Sudah Kembali',
                     ])
                     ->query(function ($query, array $data) {
+                        // Guard: jika filter di-clear/reset, value bisa null atau kosong
+                        if (empty($data['value'])) {
+                            return;
+                        }
+
                         if ($data['value'] === 'aktif') {
                             $query->whereNull('tanggal_kembali');
                         } elseif ($data['value'] === 'selesai') {
