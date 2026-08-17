@@ -6,6 +6,7 @@ use App\Filament\Resources\BarangResource\Pages;
 use App\Models\Barang;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -156,10 +157,42 @@ class BarangResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\DeleteAction::make()
+                    ->disabled(fn (Barang $record) => $record->peminjamanAktif()->exists())
+                    ->tooltip(fn (Barang $record) => $record->peminjamanAktif()->exists()
+                        ? 'Tidak dapat dihapus: barang sedang dipinjam'
+                        : 'Hapus barang'
+                    )
+                    ->requiresConfirmation()
+                    ->modalHeading('Hapus Barang')
+                    ->modalDescription(fn (Barang $record) => "Yakin ingin menghapus **{$record->nama_barang}**? Seluruh histori peminjaman terkait akan ikut terhapus jika tidak ada constraint aktif.")
+                    ->modalSubmitActionLabel('Ya, Hapus'),
             ])
             ->bulkActions([
-                Tables\Actions\DeleteBulkAction::make(),
+                Tables\Actions\DeleteBulkAction::make()
+                    ->action(function (\Illuminate\Database\Eloquent\Collection $records) {
+                        $aktif   = $records->filter(fn (Barang $b) => $b->peminjamanAktif()->exists());
+                        $hapusable = $records->diff($aktif);
+
+                        foreach ($hapusable as $barang) {
+                            $barang->delete();
+                        }
+
+                        if ($aktif->isNotEmpty()) {
+                            Notification::make()
+                                ->title('Sebagian barang tidak bisa dihapus')
+                                ->body($aktif->count() . ' barang masih aktif dipinjam dan dilewati.')
+                                ->warning()
+                                ->send();
+                        }
+
+                        if ($hapusable->isNotEmpty()) {
+                            Notification::make()
+                                ->title($hapusable->count() . ' barang berhasil dihapus.')
+                                ->success()
+                                ->send();
+                        }
+                    }),
             ]);
     }
 
@@ -170,5 +203,12 @@ class BarangResource extends Resource
             'create' => Pages\CreateBarang::route('/create'),
             'edit'   => Pages\EditBarang::route('/{record}/edit'),
         ];
+    }
+
+    // Barang yang masih punya peminjaman aktif tidak boleh dihapus.
+    // Ini adalah lapisan kedua di atas foreign key restrictOnDelete di DB.
+    public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return ! $record->peminjamanAktif()->exists();
     }
 }
