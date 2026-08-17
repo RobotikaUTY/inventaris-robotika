@@ -126,33 +126,35 @@ class PinjamkanPage extends Page implements HasForms
     {
         $data = $this->form->getState();
 
-        $barang = Barang::find($data['id_barang']);
+        try {
+            $barang = Barang::findOrFail($data['id_barang']);
 
-        if (! $barang || $data['jumlah'] > $barang->jumlah) {
+            Peminjaman::create([
+                'id_barang'      => $data['id_barang'],
+                'npm'            => $data['npm'],
+                'jumlah'         => $data['jumlah'],
+                'tanggal_pinjam' => $data['tanggal_pinjam'],
+                'keterangan'     => $data['keterangan'] ?? null,
+            ]);
+
             Notification::make()
-                ->title('Stok tidak cukup')
-                ->body("Stok tersedia: {$barang?->jumlah} {$barang?->satuan}.")
+                ->title('Berhasil!')
+                ->body("Barang **{$barang->nama_barang}** berhasil dipinjamkan.")
+                ->success()
+                ->send();
+
+            $this->form->fill([
+                'tanggal_pinjam' => now()->toDateString(),
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            // Validasi stok (dengan lockForUpdate) dilempar dari Peminjaman::creating()
+            $pesan = collect($e->errors())->flatten()->first() ?? 'Terjadi kesalahan validasi.';
+
+            Notification::make()
+                ->title('Gagal meminjamkan')
+                ->body($pesan)
                 ->danger()
                 ->send();
-            return;
         }
-
-        Peminjaman::create([
-            'id_barang'      => $data['id_barang'],
-            'npm'            => $data['npm'],
-            'jumlah'         => $data['jumlah'],
-            'tanggal_pinjam' => $data['tanggal_pinjam'],
-            'keterangan'     => $data['keterangan'] ?? null,
-        ]);
-
-        Notification::make()
-            ->title('Berhasil!')
-            ->body("Barang **{$barang->nama_barang}** berhasil dipinjamkan.")
-            ->success()
-            ->send();
-
-        $this->form->fill([
-            'tanggal_pinjam' => now()->toDateString(),
-        ]);
     }
 }
